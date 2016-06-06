@@ -1,0 +1,24 @@
+{
+  "name": "csv-headers",
+  "version": "1.0.0",
+  "description": "Returns an array containing headers of csv file",
+  "license": "MIT",
+  "author": {
+    "name": "Gaurav Luthra",
+    "email": "luthra.zenith@gmail.com"
+  },
+  "engines": {
+    "node": ">=0.10.0"
+  },
+  "dependencies" : {
+    "line-by-line" : ""
+  },
+  "repository": "https://github.com/gluthra/csv-headers",
+  "keywords": [
+    "csv",
+    "headers",
+    "titles",
+    "columns",
+    "file-headers"
+  ]
+}
