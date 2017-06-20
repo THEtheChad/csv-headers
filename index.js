@@ -1,71 +1,77 @@
-var FS 			= require('fs'),
-	LINE_READER = require('line-by-line');
+'use strict';
 
-function csvHeaders(options, cb) {
-	var headers = [];
+const fs = require('fs');
+const LineReader = require('line-by-line');
 
-	var allowedKeys = {
-		'file'      : true,
-		'delimiter' : true,
-		'encoding'  : true
-	};
+function csvHeaders(file_path, options, cb) {
+  if (!fs.existsSync(file_path)) {
+    cb(new Error(`No file at specified path: ${file_path}`));
+  }
 
-	var lowercaseOptions = {},
-		lineReader       = null;
+  let opts = Object.assign(
+    {},
+    { delimiter: ',', encoding: 'utf8', types: true },
+    options
+  );
 
-	if(options && (Object.prototype.toString.call( options ) === '[object Object]')) {
-		Object.keys(options).forEach(function(key) {
-			if(!(key.toLowerCase() in allowedKeys) || !options[key]) {
-				delete options[key];
-			} else {
-				lowercaseOptions[key.toLowerCase()] = options[key];
-			}
-		});
+  const reader = new LineReader(file_path, {
+    encoding: opts.encoding,
+    skipEmptyLines: true
+  });
 
-		// Check if file exists
-		try {
-			var stats = FS.statSync(lowercaseOptions['file']);
-			if(stats && stats.isFile()) {
-				var delimiter = lowercaseOptions['delimiter'] ? lowercaseOptions['delimiter'] : ',',
-					encoding  = lowercaseOptions['encoding']  ? lowercaseOptions['encoding']  : 'utf8'; 
+  let header = !opts.isHeader, headers, types;
 
-				lineReader = new LINE_READER(lowercaseOptions['file'], {
-					encoding        : encoding,
-					skipEmptyLines  : true
-				});
+  reader
+    .on('line', function(line) {
+      if (!header) {
+        header = opts.isHeader(line);
 
-				lineReader.on('line', function(line) {
-					headers = line.split(delimiter).map(function(name) { return name.trim(); });
-					lineReader.emit('end');
-				});
+        if (!header) return;
+      }
 
-				lineReader.on('end', function() {
-					lineReader.removeAllListeners('line');
-					lineReader.removeAllListeners('end');
-					lineReader.removeAllListeners('error');
-					if (cb) cb(null, headers);
-				});
+      if (!headers) {
+        headers = line.split(opts.delimiter).map(header => {
+          if (opts.format) {
+            header = opts.format(header);
+          }
+          return header.trim();
+        });
+      } else if (!types) {
+        types = line.split(opts.delimiter).map(value => {
+          if (value === 'true' || value === 'false') {
+            return 'BOOLEAN';
+          } else {
+            let n = Number(value);
+            if (!isNaN(n)) {
+              if (/\./.test(value)) {
+                return 'DECIMAL';
+              } else {
+                return 'INTEGER';
+              }
+            } else {
+              let d = Date.parse(value);
 
-				lineReader.on('error', function(err) {
-					lineReader.removeAllListeners('line');
-					lineReader.removeAllListeners('end');
-					lineReader.removeAllListeners('error');
-					if (cb) cb('Error while reading the headers of csv file : ' + err);
-				});
+              if (!isNaN(d)) {
+                return 'DATE';
+              }
+            }
+          }
 
-			} else {
-				if (cb) cb('No file at specified path : ' + lowercaseOptions['file']);
-			}
-		} catch(e) {
-			if(lineReader) {
-				lineReader.close();
-				lineReader = null;
-			}
+          return 'STRING';
+        });
+      }
 
-			if (cb) cb('File does not exists at : ' + lowercaseOptions['file']);
-		}
-	}
+      if (headers && (!opts.types || types)) {
+        cb(null, [headers, types]);
+        reader.pause();
+        reader.close();
+      }
+    })
+    .on('error', function(err) {
+      err.message = `Error while reading the headers of csv file: ${file_path}`;
 
+      cb(err);
+    });
 }
 
 module.exports = csvHeaders;
